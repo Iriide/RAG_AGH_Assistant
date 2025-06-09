@@ -65,22 +65,22 @@ class RAGModel:
 
         # 3. Prepare the prompt
         PROMPT = f"""You are a helpful and informative AGH bot that answers questions using the reference passages below.
-    If the passages are not relevant to the question, you may ignore them.
-
-    QUESTION: {query}
-    PASSAGES:
-    {chr(10).join(f'- {p}' for p in top_passages)}
-
-    ANSWER:"""
+        If the passages are not relevant to the question, you may ignore them.
+    
+        QUESTION: {query}
+        PASSAGES:
+        {chr(10).join(f'- {p}' for p in top_passages)}
+    
+        ANSWER:"""
 
         PROMPT_SIMPLIFIED = f"""You are a helpful and informative AGH bot that answers questions using the reference passages below.
-    If the passages are not relevant to the question, you may ignore them.
-
-    QUESTION: {query}
-    PASSAGES:
-    {chr(10).join(f'- {p}' for p in top_passages_titles)}
-
-    ANSWER:"""
+        If the passages are not relevant to the question, you may ignore them.
+    
+        QUESTION: {query}
+        PASSAGES:
+        {chr(10).join(f'- {p}' for p in top_passages_titles)}
+    
+        ANSWER:"""
 
         # 4. Generate answer from the model
         model = genai.GenerativeModel(self.GENERATION_MODEL)
@@ -89,11 +89,5 @@ class RAGModel:
         # 5. Extract token usage (requires safety + usage config)
         tokens_used = response.usage_metadata.total_token_count if hasattr(response, 'usage_metadata') else "N/A"
 
-        # 6. Display required outputs
-        print("Prompt sent to model:\n", PROMPT_SIMPLIFIED)
-        print("\nRetrieved Chunks:\n", top_passages_titles)
-        print("\nGenerated Answer:\n", response.text)
-        print(f"\nToken Count: {tokens_used}")
-
-        return response.text
+        return response.text, PROMPT_SIMPLIFIED, top_passages_titles, tokens_used
 
