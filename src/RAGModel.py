@@ -48,20 +48,52 @@ class RAGModel:
 
     def ask(self, query):
         """Generate a response to the query using the Generative AI model."""
-        request = genai.embed_content(model=self.EMBEDDING_MODEL, content=query, task_type="retrieval_query")
+
+        # 1. Get embedding for the query
+        request = genai.embed_content(
+            model=self.EMBEDDING_MODEL,
+            content=query,
+            task_type="retrieval_query"
+        )
         question_embedding = request["embedding"]
 
+        # 2. Compute similarity with document embeddings
         dot_products = np.dot(np.stack(self.df['Embedding']), question_embedding)
         top_indices = np.argsort(dot_products)[-3:][::-1]
         top_passages = self.df.iloc[top_indices]['Content'].tolist()
+        top_passages_titles = self.df.iloc[top_indices]['Title'].tolist()
 
-        PROMPT = f"""You are a helpful and informative AGH bot that answers questions using the reference passage provided below.
-            If the passage is not relevant to the question, you may ignore it.
-            QUESTION: '{query}'
-            PASSAGES: '{top_passages}'
-            ANSWER: """
+        # 3. Prepare the prompt
+        PROMPT = f"""You are a helpful and informative AGH bot that answers questions using the reference passages below.
+    If the passages are not relevant to the question, you may ignore them.
+
+    QUESTION: {query}
+    PASSAGES:
+    {chr(10).join(f'- {p}' for p in top_passages)}
+
+    ANSWER:"""
+
+        PROMPT_SIMPLIFIED = f"""You are a helpful and informative AGH bot that answers questions using the reference passages below.
+    If the passages are not relevant to the question, you may ignore them.
+
+    QUESTION: {query}
+    PASSAGES:
+    {chr(10).join(f'- {p}' for p in top_passages_titles)}
+
+    ANSWER:"""
+
+        # 4. Generate answer from the model
         model = genai.GenerativeModel(self.GENERATION_MODEL)
         response = model.generate_content(PROMPT)
-        generated_answer = response.text
 
-        print(f"Generated answer: {generated_answer}")
+        # 5. Extract token usage (requires safety + usage config)
+        tokens_used = response.usage_metadata.total_token_count if hasattr(response, 'usage_metadata') else "N/A"
+
+        # 6. Display required outputs
+        print("Prompt sent to model:\n", PROMPT_SIMPLIFIED)
+        print("\nRetrieved Chunks:\n", top_passages_titles)
+        print("\nGenerated Answer:\n", response.text)
+        print(f"\nToken Count: {tokens_used}")
+
+        return response.text
+
