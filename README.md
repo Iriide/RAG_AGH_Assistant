@@ -1,0 +1,1 @@
+create .env file with GOOGLE_API_KEY=<your_api_key>
