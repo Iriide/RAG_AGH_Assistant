@@ -15,21 +15,12 @@ class RAGModel:
         self.df = pd.read_csv("data/parsed_sections.csv")
 
         if not self.READ_FROM_FILE:
-            def embed_document(title, content):
-                response = genai.embed_content(
-                    model=EMBEDDING_MODEL,
-                    content=content,
-                    task_type="retrieval_document",
-                    title=title
-                )
-                return response["embedding"]
-
             self.df['Embedding'] = [
                 self.embed_document(row.Title, row.Content) for row in self.df.itertuples(index=False)
             ]
             self.df.to_pickle("embeddings.pkl")
         else:
-            df = pd.read_pickle("embeddings.pkl")
+            self.df = pd.read_pickle("embeddings.pkl")
 
     def authorize(self):
         """Load environment variables from .env file."""
