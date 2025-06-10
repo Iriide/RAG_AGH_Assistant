@@ -18,7 +18,7 @@ def main():
         "What is the process for appealing a grade?"
     ]
     for i, q in enumerate(queries, 1):
-        response, PROMPT_SIMPLIFIED, used_chunks, tokens_used, quality = model.ask(q)
+        response, PROMPT_SIMPLIFIED, used_chunks, tokens_used, custom_tokens_used, quality = model.ask(q)
         print(f"\nQuery {i}: {q}")
         print("Response:", response)
         print("Simplified Prompt:", PROMPT_SIMPLIFIED)
@@ -29,7 +29,7 @@ def main():
         if quality['is_low_quality']:
             print("[LOW QUALITY ANSWER FLAGGED]")
         print("Tokens Used:", tokens_used)
-
+        print("Custom Tokens Used:", custom_tokens_used)
 
 
 if __name__ == "__main__":

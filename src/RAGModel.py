@@ -86,6 +86,14 @@ class RAGModel:
         )
         return response["embedding"]
 
+    def get_tokens_used(self, response):
+        words = response.split()
+        word_count = len(words)
+        char_count = len(response)
+        keywords = len(extract_keywords(response))
+
+        return {"words": word_count*1.5, "characters": char_count//3, "keywords": keywords*3}
+
     def ask(self, query):
         """Generate a response to the query using the Generative AI model, with proper citation support."""
 
@@ -99,7 +107,20 @@ class RAGModel:
 
         # 2. Compute similarity with document embeddings
         dot_products = np.dot(np.stack(self.df['Embedding']), question_embedding)
-        top_indices = np.argsort(dot_products)[-3:][::-1]
+        sorted_indices = np.argsort(dot_products)[::-1]
+
+        # 2a. Apply similarity drop detection (Delta Cutoff)
+        delta_cutoff_ratio = 0.90  # Allow 10% drop from top score
+        top_score = dot_products[sorted_indices[0]]
+
+        top_indices = []
+        for idx in sorted_indices:
+            score = dot_products[idx]
+            if score < top_score * delta_cutoff_ratio:
+                break
+            top_indices.append(idx)
+
+        top_indices = top_indices[:5]
         top_passages_info = self.df.iloc[top_indices][['Title', 'Content']]
 
         # 3. Format passages with metadata (section title)
@@ -134,6 +155,7 @@ class RAGModel:
         answer_text = response.text
         confidence = getattr(response, 'safety_ratings', None)
 
+        custom_tokens_used = self.get_tokens_used(PROMPT + answer_text)
         tokens_used = response.usage_metadata.total_token_count if hasattr(response, 'usage_metadata') else "N/A"
 
         # 6. Quality scoring
@@ -145,6 +167,6 @@ class RAGModel:
             for _, row in top_passages_info.iterrows()
         ]
 
-        return answer_text, PROMPT_SIMPLIFIED, used_chunks, tokens_used, quality
+        return answer_text, PROMPT_SIMPLIFIED, used_chunks, tokens_used, custom_tokens_used, quality
 
 
