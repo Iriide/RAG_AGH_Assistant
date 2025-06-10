@@ -18,15 +18,18 @@ def main():
         "What is the process for appealing a grade?"
     ]
     for i, q in enumerate(queries, 1):
-        response, PROMPT_SIMPLIFIED, top_passages_titles, tokens_used, quality = model.ask(q)
+        response, PROMPT_SIMPLIFIED, used_chunks, tokens_used, quality = model.ask(q)
         print(f"\nQuery {i}: {q}")
         print("Response:", response)
         print("Simplified Prompt:", PROMPT_SIMPLIFIED)
-        print("Top Passages Titles:", top_passages_titles)
+        print("Used Chunks (For UI):")
+        for chunk in used_chunks:
+            print(f"  - Section: {chunk['section']}\n    Content: {chunk['content'][:150]}...")
         print("Quality Info:", quality)
         if quality['is_low_quality']:
             print("[LOW QUALITY ANSWER FLAGGED]")
         print("Tokens Used:", tokens_used)
+
 
 
 if __name__ == "__main__":

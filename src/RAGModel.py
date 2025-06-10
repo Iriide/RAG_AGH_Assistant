@@ -87,7 +87,7 @@ class RAGModel:
         return response["embedding"]
 
     def ask(self, query):
-        """Generate a response to the query using the Generative AI model."""
+        """Generate a response to the query using the Generative AI model, with proper citation support."""
 
         # 1. Get embedding for the query
         request = genai.embed_content(
@@ -100,44 +100,51 @@ class RAGModel:
         # 2. Compute similarity with document embeddings
         dot_products = np.dot(np.stack(self.df['Embedding']), question_embedding)
         top_indices = np.argsort(dot_products)[-3:][::-1]
-        top_passages = self.df.iloc[top_indices]['Content'].tolist()
-        top_passages_titles = self.df.iloc[top_indices]['Title'].tolist()
+        top_passages_info = self.df.iloc[top_indices][['Title', 'Content']]
 
-        # 3. Prepare the prompt
+        # 3. Format passages with metadata (section title)
+        formatted_passages = [
+            f"({row.Title}) {row.Content}" for _, row in top_passages_info.iterrows()
+        ]
+
+        # 4. Prepare prompt with instruction to cite section titles
         PROMPT = f"""You are a helpful and informative AGH bot that answers questions using the reference passages below.
-        If the passages are not relevant to the question, you may ignore them.
-    
-        QUESTION: {query}
-        PASSAGES:
-        {chr(10).join(f'- {p}' for p in top_passages)}
-    
-        ANSWER:"""
+    Use only the relevant information, and always cite the section title when answering (e.g., "According to §3(2) - Enrollment Rules...").
+
+    QUESTION: {query}
+
+    PASSAGES:
+    {chr(10).join(f'- {p}' for p in formatted_passages)}
+
+    ANSWER:"""
 
         PROMPT_SIMPLIFIED = f"""You are a helpful and informative AGH bot that answers questions using the reference passages below.
-        If the passages are not relevant to the question, you may ignore them.
-    
-        QUESTION: {query}
-        PASSAGES:
-        {chr(10).join(f'- {p}' for p in top_passages_titles)}
-    
-        ANSWER:"""
+    Cite section titles in your answer for transparency.
 
-        # 4. Generate answer from the model
+    QUESTION: {query}
+
+    PASSAGES:
+    {chr(10).join(f'- {row.Title}' for _, row in top_passages_info.iterrows())}
+
+    ANSWER:"""
+
+        # 5. Generate answer from the model
         model = genai.GenerativeModel(self.GENERATION_MODEL)
         response = model.generate_content(PROMPT)
         answer_text = response.text
         confidence = getattr(response, 'safety_ratings', None)
-        # If the model provides confidence, extract it; else None
-        # You may need to adapt this if the API returns confidence differently
 
-        # 5. Extract token usage (requires safety + usage config)
         tokens_used = response.usage_metadata.total_token_count if hasattr(response, 'usage_metadata') else "N/A"
 
         # 6. Quality scoring
         quality = score_answer(answer_text, query, confidence=None)
 
-        return answer_text, PROMPT_SIMPLIFIED, top_passages_titles, tokens_used, quality
+        # 7. Prepare metadata for UI highlighting (5.4)
+        used_chunks = [
+            {'section': row.Title, 'content': row.Content}
+            for _, row in top_passages_info.iterrows()
+        ]
 
-        # return response.text, PROMPT_SIMPLIFIED, top_passages_titles, tokens_used
-        return answer_text, PROMPT_SIMPLIFIED, top_passages_titles, tokens_used, quality
+        return answer_text, PROMPT_SIMPLIFIED, used_chunks, tokens_used, quality
+
 
