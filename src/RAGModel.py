@@ -50,35 +50,39 @@ def has_invalid_sections(text: str, valid_titles: list[str]) -> bool:
     return bool(cited_numbers - valid_numbers)
 
 
-def is_low_quality_answer(answer: str, question: str, valid_titles: [], min_tokens: int = 15) -> (bool, dict):
-    low_quality_answer_stats = {}
+def is_low_quality_answer(answer: str, question: str, valid_titles: [], top_score: float, min_tokens: int = 15) -> (bool, dict):
+    low_quality_answer_reason = []
     answer_words = answer.strip().split()
     # well if it's empty
     if not answer_words or len(answer_words) <= 1:
-        low_quality_answer_stats['empty_answers'] = 1
-        return True, low_quality_answer_stats
+        low_quality_answer_reason.append('empty_answers')
+        return True, low_quality_answer_reason
     # if the answer is same as the question
     if answer.strip().lower() == question.strip().lower():
-        low_quality_answer_stats['same_as_question'] = 1
-        return True, low_quality_answer_stats
+        low_quality_answer_reason.append('same_as_question')
+        return True, low_quality_answer_reason
+    # if the answer was based on poorly suited passages
+    if top_score < 0.55:
+        low_quality_answer_reason.append('poor_passages')
+        return True, low_quality_answer_reason
     # if less than 15 tokens
     if len(answer_words) < min_tokens:
-        low_quality_answer_stats['too_short'] = 1
-        return True, low_quality_answer_stats
+        low_quality_answer_reason.append('too_short')
+        return True, low_quality_answer_reason
     # if the answer provided by model does not have keywordss from the question
     if not extract_keywords(question).intersection(extract_keywords(answer)):
-        low_quality_answer_stats['no_keywords'] = 1
-        return True, low_quality_answer_stats
+        low_quality_answer_reason.append('no_keywords')
+        return True, low_quality_answer_reason
     if has_invalid_sections(answer, valid_titles):
-        low_quality_answer_stats['invalid_sections'] = 1
-        return True, low_quality_answer_stats
+        low_quality_answer_reason.append('invalid_sections')
+        return True, low_quality_answer_reason
     if has_uncertain_phrases_regex(answer):
-        low_quality_answer_stats['uncertain_phrases'] = 1
-        return True, low_quality_answer_stats
-    return False, {}
+        low_quality_answer_reason.append('uncertain_phrases')
+        return True, low_quality_answer_reason
+    return False, []
 
 
-def score_answer(answer: str, question: str, valid_titles: [], confidence: float = None) -> Dict[str, Any]:
+def score_answer(answer: str, question: str, valid_titles: [], confidence: float, top_score: float) -> Dict[str, Any]:
     answer_clean = answer.strip().lower()
     answer_words = extract_keywords(answer_clean)
     question_keywords = extract_keywords(question)
@@ -98,8 +102,8 @@ def score_answer(answer: str, question: str, valid_titles: [], confidence: float
         'length': length,
         'uncertain_count': uncertain_count,
         'confidence': confidence,
-        'is_low_quality': is_low_quality_answer(answer, question, valid_titles)[0],
-        'low_quality_answer_stats': is_low_quality_answer(answer, question, valid_titles)[1],
+        'is_low_quality': is_low_quality_answer(answer, question, valid_titles, top_score)[0],
+        'low_quality_answer_reason': is_low_quality_answer(answer, question, valid_titles, top_score)[1],
     }
 
 def compute_overlap_percentage(answer: str, sources: List[str]) -> float:
@@ -182,8 +186,9 @@ class RAGModel:
         sorted_indices = np.argsort(dot_products)[::-1]
 
         # 2a. Apply similarity drop detection (Delta Cutoff)
-        delta_cutoff_ratio = 0.90  # Allow 10% drop from top score
+        delta_cutoff_ratio = 0.95  # Allow 5% drop from top score
         top_score = dot_products[sorted_indices[0]]
+        print(top_score)
 
         top_indices = []
         for idx in sorted_indices:
@@ -231,7 +236,7 @@ class RAGModel:
         tokens_used = response.usage_metadata.total_token_count if hasattr(response, 'usage_metadata') else "N/A"
 
         # 6. Quality scoring and trust scoring
-        quality = score_answer(answer_text, query, self.df['Title'].tolist(), confidence)
+        quality = score_answer(answer_text, query, self.df['Title'].tolist(), confidence, top_score)
 
         source_texts = top_passages_info['Content'].tolist()
         trust = compute_trust_score(answer_text, source_texts, self.embed_document)
