@@ -19,17 +19,20 @@ def main():
     ]
     for i, q in enumerate(queries, 1):
         response, PROMPT_SIMPLIFIED, used_chunks, tokens_used, custom_tokens_used, quality = model.ask(q)
+        print("-----------------------------------------")
         print(f"\nQuery {i}: {q}")
         print("Response:", response)
         print("Simplified Prompt:", PROMPT_SIMPLIFIED)
-        print("Used Chunks (For UI):")
+        print("Used Chunks:")
         for chunk in used_chunks:
-            print(f"  - Section: {chunk['section']}\n    Content: {chunk['content'][:150]}...")
+            print(chunk['section'])
         print("Quality Info:", quality)
         if quality['is_low_quality']:
             print("[LOW QUALITY ANSWER FLAGGED]")
+            print(quality['low_quality_answer_stats'].keys())
         print("Tokens Used:", tokens_used)
         print("Custom Tokens Used:", custom_tokens_used)
+
 
 
 if __name__ == "__main__":
