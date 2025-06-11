@@ -1,8 +1,7 @@
+import streamlit as st
 from src.RAGModel import RAGModel
 
-
-def main():
-    """Main function to run the GenAI application."""
+def run_queries():
     model = RAGModel()
     queries = [
         "What are the requirements for passing a semester?",
@@ -17,23 +16,34 @@ def main():
         "Are there penalties for late submissions?",
         "What is the process for appealing a grade?"
     ]
-    for i, q in enumerate(queries, 1):
-        response, PROMPT_SIMPLIFIED, used_chunks, tokens_used, custom_tokens_used, quality = model.ask(q)
-        print("-----------------------------------------")
-        print(f"\nQuery {i}: {q}")
-        print("Response:", response)
-        print("Simplified Prompt:", PROMPT_SIMPLIFIED)
-        print("Used Chunks:")
-        for chunk in used_chunks:
-            print(chunk['section'])
-        print("Quality Info:", quality)
-        if quality['is_low_quality']:
-            print("[LOW QUALITY ANSWER FLAGGED]")
-            print(quality['low_quality_answer_stats'].keys())
-        print("Tokens Used:", tokens_used)
-        print("Custom Tokens Used:", custom_tokens_used)
+
+    for i, query in enumerate(queries, 1):
+        with st.expander(f"Query {i}: {query}", expanded=False):
+            response, simplified_prompt, used_chunks, tokens_used, custom_tokens_used ,quality,trust = model.ask(query)
+            print(f"Quality: {quality}")
+            st.markdown(f"**Response:**\n\n{response}")
+            st.markdown(f"**Simplified Prompt:**\n\n```{simplified_prompt}```")
+
+            st.markdown("**Retrieved Chunks:**")
+            for chunk in used_chunks:
+                st.markdown(f"- **Section:** {chunk['section']}")
+                st.markdown(f"  ```{chunk['content'][:300]}...```")
+
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Token Count", tokens_used)
+            col2.metric("Custom Token Count", str(custom_tokens_used))
+            col3.metric("Trust", str(trust))
+            col4.metric("Quality", "Low ❌" if quality["low_quality_answer_stats"].keys() else "Good ✅")
 
 
+def main():
+    st.set_page_config(page_title="RAGModel UI", layout="wide")
+    st.title("🎓 GenAI University Assistant")
+
+    if st.button("Run RAGModel on All Queries"):
+        run_queries()
+    else:
+        st.info("Click the button above to run the model on 11 common academic queries.")
 
 if __name__ == "__main__":
     main()

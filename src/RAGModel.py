@@ -1,3 +1,4 @@
+import math
 import os
 
 import numpy as np
@@ -5,7 +6,7 @@ import pandas as pd
 from dotenv import load_dotenv
 import google.generativeai as genai
 import re
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 
 
@@ -101,7 +102,31 @@ def score_answer(answer: str, question: str, valid_titles: [], confidence: float
         'low_quality_answer_stats': is_low_quality_answer(answer, question, valid_titles)[1],
     }
 
+def compute_overlap_percentage(answer: str, sources: List[str]) -> float:
+    answer_tokens = set(re.findall(r'\w+', answer.lower()))
+    source_tokens = set()
+    for passage in sources:
+        source_tokens.update(re.findall(r'\w+', passage.lower()))
 
+    if not answer_tokens:
+        return 0.0
+    overlap = answer_tokens & source_tokens
+    return len(overlap) / len(answer_tokens)
+
+def compute_similarity_with_sources(answer: str, sources: List[str], embed_fn) -> float:
+    answer_embedding = embed_fn("Answer", answer)
+    source_embeddings = [embed_fn("Source", s) for s in sources]
+    dot_scores = [np.dot(answer_embedding, emb) for emb in source_embeddings]
+    return float(np.mean(dot_scores)) if dot_scores else 0.0
+
+def compute_trust_score(answer: str, sources: List[str], embed_fn) -> Dict[str, float]:
+    overlap_pct = compute_overlap_percentage(answer, sources)
+    similarity = compute_similarity_with_sources(answer, sources, embed_fn)
+    return {
+        "overlap_pct": overlap_pct,
+        "semantic_similarity": similarity,
+        "chunks_used": len(sources)
+    }
 class RAGModel:
     def __init__(self, EMBEDDING_MODEL='models/embedding-001', GENERATION_MODEL='gemini-1.5-flash-8b'):
         self.authorize()
@@ -200,13 +225,16 @@ class RAGModel:
         model = genai.GenerativeModel(self.GENERATION_MODEL)
         response = model.generate_content(PROMPT)
         answer_text = response.text
-        confidence = getattr(response, 'safety_ratings', None)
+        confidence = math.exp(response.candidates[0].avg_logprobs) if hasattr(response, 'candidates') and response.candidates else 0.0
 
         custom_tokens_used = self.get_tokens_used(PROMPT + answer_text)
         tokens_used = response.usage_metadata.total_token_count if hasattr(response, 'usage_metadata') else "N/A"
 
-        # 6. Quality scoring
-        quality = score_answer(answer_text, query, self.df['Title'].tolist(), confidence=None)
+        # 6. Quality scoring and trust scoring
+        quality = score_answer(answer_text, query, self.df['Title'].tolist(), confidence)
+
+        source_texts = top_passages_info['Content'].tolist()
+        trust = compute_trust_score(answer_text, source_texts, self.embed_document)
 
         # 7. Prepare metadata for UI highlighting (5.4)
         used_chunks = [
@@ -214,4 +242,4 @@ class RAGModel:
             for _, row in top_passages_info.iterrows()
         ]
 
-        return answer_text, PROMPT_SIMPLIFIED, used_chunks, tokens_used, custom_tokens_used, quality
+        return answer_text, PROMPT_SIMPLIFIED, used_chunks, tokens_used, custom_tokens_used, quality, trust
